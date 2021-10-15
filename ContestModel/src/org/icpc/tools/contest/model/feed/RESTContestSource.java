@@ -18,11 +18,16 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.SocketException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.text.NumberFormat;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -326,7 +331,22 @@ public class RESTContestSource extends DiskContestSource {
 		sb.append(" (" + status + ")");
 
 		if (status == HttpURLConnection.HTTP_NOT_FOUND) {
-			localFile.delete();
+			File fileInCWD = new File(href.startsWith("/") ? href.substring(1) : href);
+			if (fileInCWD.exists()) {
+				if (href.endsWith("/"))
+					Files.write(localFile.toPath(), Stream.concat(Stream.concat(Stream.of("<html><body><table>"),
+									Arrays.stream(super.getDirectory("../.." + fileInCWD.getAbsolutePath()))
+											.map(s -> "<tr><td><a href=\"" + s + "\">" + s + "</a></td></tr>")),
+							Stream.of("</table></body></html>")).collect(Collectors.toList()));
+				else
+					Files.copy(fileInCWD.toPath(), localFile.toPath(), StandardCopyOption.REPLACE_EXISTING,
+							StandardCopyOption.COPY_ATTRIBUTES);
+				String etag = conn.getHeaderField("ETag");
+				updateFileInfo(localFile, href, etag);
+				sb.append(", copied from CWD");
+			} else {
+				localFile.delete();
+			}
 			Trace.trace(Trace.INFO, sb.toString());
 			return;
 		}
